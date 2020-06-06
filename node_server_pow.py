@@ -4,15 +4,29 @@ import time
 
 from flask import Flask, request
 import requests
+import sys
+
+try:
+    port = int(sys.argv[1])
+except Exception as e:
+    port = 8000
 
 
 class Block:
-    def __init__(self, index, transactions, timestamp, previous_hash, nonce=0):
+    def __init__(self, index=0, transactions=0, timestamp=0, previous_hash=0, nonce=0):
         self.index = index
         self.transactions = transactions
         self.timestamp = timestamp
         self.previous_hash = previous_hash
         self.nonce = nonce
+
+    def from_dict(self,d):
+        self.index = d['index']
+        self.transactions = d['transactions']
+        self.timestamp = d['timestamp']
+        self.previous_hash = d['previous_hash']
+        self.nonce = d['nonce']
+        self.hash = d['hash']
 
     def compute_hash(self):
         """
@@ -24,7 +38,7 @@ class Block:
 
 class Blockchain:
     # difficulty of our PoW algorithm
-    difficulty = 2
+    difficulty = 3
 
     def __init__(self):
         self.unconfirmed_transactions = []
@@ -95,8 +109,14 @@ class Blockchain:
     def check_chain_validity(cls, chain):
         result = True
         previous_hash = "0"
-
+        cnt = 0
+        print(chain)
         for block in chain:
+            print(cnt)
+            cnt+=1
+            new_block=Block()
+            new_block.from_dict(block)
+            block = new_block
             block_hash = block.hash
             # remove the hash field to recompute the hash again
             # using `compute_hash` method.
@@ -104,6 +124,8 @@ class Blockchain:
 
             if not cls.is_valid_proof(block, block_hash) or \
                     previous_hash != block.previous_hash:
+                print(cls.is_valid_proof(block, block_hash))
+                print(previous_hash, block.previous_hash)
                 result = False
                 break
 
@@ -117,8 +139,8 @@ class Blockchain:
         transactions to the blockchain by adding them to the block
         and figuring out Proof Of Work.
         """
-        if not self.unconfirmed_transactions:
-            return False
+        # if not self.unconfirmed_transactions:
+            # return False
 
         last_block = self.last_block
 
@@ -142,7 +164,8 @@ blockchain = Blockchain()
 blockchain.create_genesis_block()
 
 # the address to other participating members of the network
-peers = set()
+whoami = 'http://127.0.0.1:{}/'.format(port)
+peers = set({whoami})
 
 
 # endpoint to submit a new transaction. This will be used by
@@ -173,7 +196,7 @@ def get_chain():
         chain_data.append(block.__dict__)
     return json.dumps({"length": len(chain_data),
                        "chain": chain_data,
-                       "peers": list(peers)})
+                       "peers": list(peers)},indent=2)
 
 
 # endpoint to request the node to mine the unconfirmed
@@ -181,17 +204,27 @@ def get_chain():
 # a command to mine from our application itself.
 @app.route('/mine', methods=['GET'])
 def mine_unconfirmed_transactions():
+    global whoami
     result = blockchain.mine()
     if not result:
         return "No transactions to mine"
     else:
         # Making sure we have the longest chain before announcing to the network
-        chain_length = len(blockchain.chain)
-        consensus()
+        # chain_length = len(blockchain.chain)
+        miner = consensus()
+        if miner == whoami:
+            announce_new_block(blockchain.last_block)
+            return "Block #{} is mined. miner: {}".format(blockchain.last_block.index,whoami)
+        else:
+            return "not me"
+        '''
         if chain_length == len(blockchain.chain):
             # announce the recently mined block to the network
             announce_new_block(blockchain.last_block)
-        return "Block #{} is mined.".format(blockchain.last_block.index)
+            return "Block #{} is mined.".format(blockchain.last_block.index)
+        else:
+            return "I'm mining Block #{}, but Block #{} has been mined by other workers".format(chain_length,blockchain.last_block.index)
+        '''
 
 
 # endpoint to add new peers to the network.
@@ -291,23 +324,28 @@ def consensus():
     found, our chain is replaced with it.
     """
     global blockchain
+    global peers
+    global whoami
 
     longest_chain = None
+    longest_node = None
     current_len = len(blockchain.chain)
-
     for node in peers:
         response = requests.get('{}chain'.format(node))
         length = response.json()['length']
         chain = response.json()['chain']
+        peers.update(response.json()['peers'])
         if length > current_len and blockchain.check_chain_validity(chain):
+            print(chain)
+            longest_node = node
             current_len = length
             longest_chain = chain
 
     if longest_chain:
         blockchain = longest_chain
-        return True
+        return longest_node
 
-    return False
+    return whoami
 
 
 def announce_new_block(block):
@@ -324,4 +362,4 @@ def announce_new_block(block):
                       headers=headers)
 
 # Uncomment this line if you want to specify the port number in the code
-#app.run(debug=True, port=8000)
+app.run(debug=True, port=port)
