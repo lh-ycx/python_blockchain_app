@@ -11,7 +11,6 @@ try:
 except Exception as e:
     port = 8000
 
-
 class Block:
     def __init__(self, index=0, transactions=0, timestamp=0, previous_hash=0, nonce=0):
         self.index = index
@@ -69,9 +68,13 @@ class Blockchain:
         previous_hash = self.last_block.hash
 
         if previous_hash != block.previous_hash:
+            print(1)
+            print("previous_hash", previous_hash)
+            print("block.previous_hash", block.previous_hash)
             return False
 
         if not Blockchain.is_valid_proof(block, proof):
+            print(2)
             return False
 
         block.hash = proof
@@ -102,17 +105,24 @@ class Blockchain:
         Check if block_hash is valid hash of block and satisfies
         the difficulty criteria.
         """
+        # print('block', block)
+        # print('block_hash' , block_hash)
+        # print('block.compute_hash()', block.compute_hash())
+        # print(block_hash.startswith('0' * Blockchain.difficulty))
+        # print(block_hash in block.compute_hash())
+        if block.index == 0:
+            return block_hash in block.compute_hash()
         return (block_hash.startswith('0' * Blockchain.difficulty) and
-                block_hash == block.compute_hash())
+                block_hash in block.compute_hash())
 
     @classmethod
     def check_chain_validity(cls, chain):
         result = True
         previous_hash = "0"
         cnt = 0
-        print(chain)
+        # print(chain)
         for block in chain:
-            print(cnt)
+            # print(cnt)
             cnt+=1
             new_block=Block()
             new_block.from_dict(block)
@@ -124,8 +134,9 @@ class Blockchain:
 
             if not cls.is_valid_proof(block, block_hash) or \
                     previous_hash != block.previous_hash:
-                print(cls.is_valid_proof(block, block_hash))
-                print(previous_hash, block.previous_hash)
+                # print(cls.is_valid_proof(block, block_hash))
+                # print(block, block_hash)
+                # print(previous_hash, block.previous_hash)
                 result = False
                 break
 
@@ -185,7 +196,6 @@ def new_transaction():
 
     return "Success", 201
 
-
 # endpoint to return the node's copy of the chain.
 # Our application will be using this endpoint to query
 # all the posts to display.
@@ -205,6 +215,8 @@ def get_chain():
 @app.route('/mine', methods=['GET'])
 def mine_unconfirmed_transactions():
     global whoami
+    global blockchain
+
     result = blockchain.mine()
     if not result:
         return "No transactions to mine"
@@ -212,11 +224,12 @@ def mine_unconfirmed_transactions():
         # Making sure we have the longest chain before announcing to the network
         # chain_length = len(blockchain.chain)
         miner = consensus()
+        
         if miner == whoami:
             announce_new_block(blockchain.last_block)
-            return "Block #{} is mined. miner: {}".format(blockchain.last_block.index,whoami)
+            return "Block #{} is mined.".format(blockchain.last_block.index)
         else:
-            return "not me"
+            return "Block #{} has been mined by other workers".format(blockchain.last_block.index)
         '''
         if chain_length == len(blockchain.chain):
             # announce the recently mined block to the network
@@ -307,6 +320,7 @@ def verify_and_add_block():
     added = blockchain.add_block(block, proof)
 
     if not added:
+        print("The block was discarded by the node")
         return "The block was discarded by the node", 400
 
     return "Block added to the chain", 201
@@ -331,18 +345,24 @@ def consensus():
     longest_node = None
     current_len = len(blockchain.chain)
     for node in peers:
+        if node == whoami:
+            continue
         response = requests.get('{}chain'.format(node))
         length = response.json()['length']
         chain = response.json()['chain']
-        peers.update(response.json()['peers'])
+        # peers.update(response.json()['peers'])
         if length > current_len and blockchain.check_chain_validity(chain):
-            print(chain)
+            # print(chain)
             longest_node = node
             current_len = length
             longest_chain = chain
 
     if longest_chain:
-        blockchain = longest_chain
+        blockchain.chain = []
+        for b in longest_chain:
+            temp_b = Block()
+            temp_b.from_dict(b)
+            blockchain.chain.append(temp_b)
         return longest_node
 
     return whoami
@@ -354,12 +374,18 @@ def announce_new_block(block):
     Other blocks can simply verify the proof of work and add it to their
     respective chains.
     """
+    global whoami
     for peer in peers:
+        if peer == whoami:
+            continue
         url = "{}add_block".format(peer)
         headers = {'Content-Type': "application/json"}
-        requests.post(url,
+        res = requests.post(url,
                       data=json.dumps(block.__dict__, sort_keys=True),
                       headers=headers)
+        if 'discarded' in res.text:
+            return False
+        return True
 
 # Uncomment this line if you want to specify the port number in the code
 app.run(debug=True, port=port)
