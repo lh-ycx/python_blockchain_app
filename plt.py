@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 from collections import defaultdict
 
 log_dirs = ['pos.log','pow.log']
+box_data = []
 for log_dir in log_dirs:
     plt.figure()
     miner2cnt = defaultdict(int)
@@ -15,19 +16,22 @@ for log_dir in log_dirs:
     for _ in miner2cnt.keys():
         data.append(miner2cnt[_])
     data.sort()
+    box_data.append(data)
     # print(data)
+    '''
     s = sum(data)
     cdf_x = [_ for _ in data]
     cdf_y = [data[0]/s]
     for _ in range(1,len(data)):
         data[_] += data[_-1]
         cdf_y.append(data[_]/s)
-
+    '''
     # print(cdf_y)
 
-    plt.plot(cdf_x,cdf_y)
-    plt.xlabel("Block Count",fontsize=20)
-    plt.ylabel("CDF",fontsize=20)
-    plt.title("{}".format(log_dir[:-4]),fontsize=25)
-    plt.savefig("{}.png".format(log_dir))
+    # plt.plot(cdf_x,cdf_y)
+plt.boxplot(x=box_data, showfliers = True, labels = ["POW", "POS"])
+plt.xlabel("Consensus Algorithms",fontsize=20)   
+plt.ylabel("Block Count",fontsize=20)
+# plt.title("{}".format(log_dir[:-4]),fontsize=25)
+plt.savefig("test.png".format(log_dir))
 
