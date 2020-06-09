@@ -17,7 +17,7 @@ cur_blocks = 0
 
 if __name__ == "__main__":
     pool = []
-    f = open('qianlang.log','w')
+    f = open('qianlang-3.log','w')
     stacks_p = np.random.pareto(3,clients_num)
     stacks_p = stacks_p/sum(stacks_p)
     stacks = set(range(stacks_num))
