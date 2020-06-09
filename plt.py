@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 from collections import defaultdict
 
-log_dirs = ['pos.log','pow.log']
+log_dirs = ['pos.log','pow.log','qianlang.log','houlang.log']
 for log_dir in log_dirs:
     plt.figure()
     miner2cnt = defaultdict(int)
